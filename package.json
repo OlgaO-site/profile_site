@@ -1,0 +1,40 @@
+{
+	"name": "olga-o-site",
+	"version": "0.1.0",
+	"private": true,
+	"scripts": {
+		"dev": "next dev",
+		"build": "next build",
+		"start": "next start",
+		"lint": "eslint"
+	},
+	"dependencies": {
+		"@aws-sdk/client-s3": "^3.981.0",
+		"@aws-sdk/s3-request-presigner": "^3.981.0",
+		"@react-three/drei": "^10.7.7",
+		"@react-three/fiber": "^9.5.0",
+		"@supabase/supabase-js": "^2.91.0",
+		"axios": "^1.13.2",
+		"firebase": "^12.7.0",
+		"firebase-admin": "^13.6.0",
+		"next": "16.1.1",
+		"react": "19.2.3",
+		"react-dom": "19.2.3",
+		"react-hook-form": "^7.70.0",
+		"three": "^0.182.0",
+		"toastify-js": "^1.12.0"
+	},
+	"devDependencies": {
+		"@tailwindcss/postcss": "^4",
+		"@trivago/prettier-plugin-sort-imports": "^6.0.1",
+		"@types/node": "^20.19.27",
+		"@types/react": "^19.2.7",
+		"@types/react-dom": "^19",
+		"@types/toastify-js": "^1.12.4",
+		"eslint": "^9",
+		"eslint-config-next": "16.1.1",
+		"prettier": "^3.7.4",
+		"tailwindcss": "^4",
+		"typescript": "^5.9.3"
+	}
+}
