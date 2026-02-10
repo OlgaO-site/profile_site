@@ -14,7 +14,7 @@ export type MediaItem = {
 	url: string
 }
 
-const ASPECT = 5 / 7
+const ASPECT = 1 / 2
 
 // TODO: цей компонент тільки для відео: якщо у галерею додавати фото, то якість фото виходить гіршою, зображення темніші, ніж є у реальності. Для фотогалереї треба використовувати PhotoGalleryCanvas. Відрізняється від фото налаштуваннями канви: немає flat + linear
 
@@ -22,7 +22,7 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const canvasWrapperRef = useRef<HTMLDivElement>(null)
 
-	const [containerWidth, setContainerWidth] = useState(280)
+	const [containerWidth, setContainerWidth] = useState(224)
 	const [isPlaying, setIsPlaying] = useState(false)
 
 	const [offsetY, setOffsetY] = useState(0)
@@ -34,34 +34,34 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 
 			if (isMobile) {
 				if (h <= 550) {
-					setContainerWidth(280)
-					setOffsetY(30)
+					setContainerWidth(224)
+					setOffsetY(10)
 				} else if (h <= 650) {
-					setContainerWidth(280)
-					setOffsetY(20)
+					setContainerWidth(224)
+					setOffsetY(10)
 				} else if (h <= 750) {
-					setContainerWidth(320)
-					setOffsetY(20)
+					setContainerWidth(300)
+					setOffsetY(10)
 				} else {
-					setContainerWidth(320)
-					setOffsetY(20)
+					setContainerWidth(300)
+					setOffsetY(10)
 				}
 			} else {
 				if (h <= 400) {
-					setContainerWidth(280)
+					setContainerWidth(160)
 					setOffsetY(50)
-				} else if (h <= 700) {
-					setContainerWidth(280)
-					setOffsetY(20)
+				} else if (h <= 750) {
+					setContainerWidth(210)
+					setOffsetY(-10)
 				} else if (h <= 800) {
-					setContainerWidth(320)
+					setContainerWidth(280)
 					setOffsetY(-10)
 				} else if (h <= 900) {
-					setContainerWidth(320)
-					setOffsetY(-40)
+					setContainerWidth(300)
+					setOffsetY(-20)
 				} else {
-					setContainerWidth(340)
-					setOffsetY(-80)
+					setContainerWidth(320)
+					setOffsetY(-50)
 				}
 			}
 		}
@@ -79,7 +79,7 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 	return (
 		<div
 			ref={containerRef}
-			className='aspect-5/7 h-auto relative'
+			className='aspect-1/2 h-auto relative'
 			style={{
 				width: `${containerWidth}px`,
 				transform: `translateY(${offsetY}px)`
@@ -337,7 +337,7 @@ function VideoCaption({ media, isPlaying }: { media: MediaItem[]; isPlaying: boo
 	return (
 		<div className='w-full mt-6 xl:mt-8'>
 			<p
-				className={`min-h-3.5 xl:text-lg text-center xl:text-left w-full tracking-1 leading-none ${playfairDisplay.className} relative z-50`}
+				className={`min-h-3.5 xl:text-lg text-center xl:text-left w-full tracking-1 leading-none xl:mt-[1em] ${playfairDisplay.className} relative z-50`}
 			>
 				{media[index]?.name}
 			</p>

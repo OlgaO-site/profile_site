@@ -37,7 +37,7 @@ const NavBar = () => {
 		})
 
 	return (
-		<nav className='w-full flex flex-wrap items-center gap-x-3 xl:gap-x-10 gap-y-3 md:min-w-78 justify-center xl:justify-between mx-auto'>
+		<nav className='w-full flex flex-wrap items-center gap-x-8 xl:gap-x-12 gap-y-3 xl:min-w-78 justify-center xl:w-fit  xl:justify-start mx-auto'>
 			{navItems.map(item => (
 				<Link
 					key={item.title}

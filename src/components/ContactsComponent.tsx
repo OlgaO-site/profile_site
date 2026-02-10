@@ -5,7 +5,7 @@ const ContactsComponent = ({ data }: { data: PageFormValues }) => {
 
 	return (
 		<div className='flex flex-col justify-center w-fit xl:w-100 mt-14 xl:mt-0 mx-auto xl:mb-0'>
-			<h1 className='xl:text-[40px] text-nav font-semibold playfair leading-none'>
+			<h1 className='text-[15px] xl:text-[40px] text-nav font-semibold playfair leading-none'>
 				Let’s talk.
 			</h1>
 			<p className='text-xs xl:text-[22px] leading-none playfair my-7.5 xl:mt-11 xl:mb-10'>
