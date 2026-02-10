@@ -37,7 +37,7 @@ const FooterNav = () => {
 				<Link
 					key={item.title}
 					href={item.slug}
-					className={`tracking-5 hover:text-nav leading-none transform duration-300 ${
+					className={`tracking-5 xl:text-lg hover:text-nav leading-none transform duration-300 ${
 						isActive(item.slug) ? 'text-nav' : ''
 					}`}
 				>

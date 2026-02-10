@@ -14,7 +14,7 @@ export type MediaItem = {
 	url: string
 }
 
-const ASPECT = 1 / 2
+const ASPECT = 2 / 3
 
 // TODO: цей компонент тільки для відео: якщо у галерею додавати фото, то якість фото виходить гіршою, зображення темніші, ніж є у реальності. Для фотогалереї треба використовувати PhotoGalleryCanvas. Відрізняється від фото налаштуваннями канви: немає flat + linear
 
@@ -34,24 +34,27 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 
 			if (isMobile) {
 				if (h <= 550) {
-					setContainerWidth(224)
+					setContainerWidth(280)
 					setOffsetY(10)
 				} else if (h <= 650) {
-					setContainerWidth(224)
+					setContainerWidth(300)
 					setOffsetY(10)
 				} else if (h <= 750) {
-					setContainerWidth(300)
-					setOffsetY(10)
+					setContainerWidth(320)
+					setOffsetY(0)
 				} else {
-					setContainerWidth(300)
-					setOffsetY(10)
+					setContainerWidth(320)
+					setOffsetY(0)
 				}
 			} else {
 				if (h <= 400) {
-					setContainerWidth(160)
+					setContainerWidth(200)
 					setOffsetY(50)
-				} else if (h <= 750) {
-					setContainerWidth(210)
+				} else if (h <= 550) {
+					setContainerWidth(240)
+					setOffsetY(0)
+				} else if (h <= 700) {
+					setContainerWidth(280)
 					setOffsetY(-10)
 				} else if (h <= 800) {
 					setContainerWidth(280)
@@ -75,11 +78,11 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 			window.visualViewport?.removeEventListener('resize', updateLayout)
 		}
 	}, [])
-
+	console.log('containerWidth', containerWidth, 'offsetY', offsetY)
 	return (
 		<div
 			ref={containerRef}
-			className='aspect-1/2 h-auto relative'
+			className='aspect-2/3 h-auto relative'
 			style={{
 				width: `${containerWidth}px`,
 				transform: `translateY(${offsetY}px)`
@@ -98,7 +101,7 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 						<Gallery
 							media={media}
 							containerRef={containerRef}
-							setIsPlaying={setIsPlaying} // ⬅️ НОВЕ
+							setIsPlaying={setIsPlaying}
 							canvasRef={canvasWrapperRef}
 						/>
 					</Canvas>
