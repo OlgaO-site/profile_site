@@ -27,6 +27,8 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 
 	const [offsetY, setOffsetY] = useState(0)
 
+	const [currentIndex, setCurrentIndex] = useState(0)
+
 	useEffect(() => {
 		const updateLayout = () => {
 			const h = window.visualViewport?.height ?? window.innerHeight
@@ -37,13 +39,13 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 					setContainerWidth(280)
 					setOffsetY(10)
 				} else if (h <= 650) {
-					setContainerWidth(300)
+					setContainerWidth(290)
 					setOffsetY(10)
 				} else if (h <= 750) {
-					setContainerWidth(320)
+					setContainerWidth(300)
 					setOffsetY(0)
 				} else {
-					setContainerWidth(320)
+					setContainerWidth(317)
 					setOffsetY(0)
 				}
 			} else {
@@ -63,7 +65,7 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 					setContainerWidth(300)
 					setOffsetY(-20)
 				} else {
-					setContainerWidth(320)
+					setContainerWidth(317)
 					setOffsetY(-50)
 				}
 			}
@@ -78,7 +80,7 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 			window.visualViewport?.removeEventListener('resize', updateLayout)
 		}
 	}, [])
-	console.log('containerWidth', containerWidth, 'offsetY', offsetY)
+
 	return (
 		<div
 			ref={containerRef}
@@ -101,13 +103,19 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 						<Gallery
 							media={media}
 							containerRef={containerRef}
-							setIsPlaying={setIsPlaying}
 							canvasRef={canvasWrapperRef}
+							setIsPlaying={setIsPlaying}
+							currentIndex={currentIndex}
+							setCurrentIndex={setCurrentIndex}
 						/>
 					</Canvas>
 				</div>
 
-				<VideoCaption media={media} isPlaying={isPlaying} />
+				<VideoCaption
+					media={media}
+					isPlaying={isPlaying}
+					index={currentIndex} // ⬅️ тепер синхрон
+				/>
 			</div>
 		</div>
 	)
@@ -117,14 +125,17 @@ function Gallery({
 	media,
 	containerRef,
 	canvasRef,
-	setIsPlaying
+	setIsPlaying,
+	currentIndex,
+	setCurrentIndex
 }: {
 	media: MediaItem[]
 	containerRef: React.RefObject<HTMLDivElement | null>
 	canvasRef: React.RefObject<HTMLDivElement | null>
 	setIsPlaying: (v: boolean) => void
+	currentIndex: number
+	setCurrentIndex: React.Dispatch<React.SetStateAction<number>>
 }) {
-	const [currentIndex, setCurrentIndex] = useState(0)
 	const [nextIndex, setNextIndex] = useState<number | null>(null)
 	const [size, setSize] = useState({ w: 0, h: 0 })
 	const [transitionProgress, setTransitionProgress] = useState(0)
@@ -319,22 +330,15 @@ function Gallery({
 	)
 }
 
-function VideoCaption({ media, isPlaying }: { media: MediaItem[]; isPlaying: boolean }) {
-	const [index, setIndex] = useState(0)
-
-	useEffect(() => {
-		const onClick = (e: MouseEvent) => {
-			if (e.clientX < window.innerWidth / 2) {
-				setIndex(prev => (prev - 1 + media.length) % media.length)
-			} else {
-				setIndex(prev => (prev + 1) % media.length)
-			}
-		}
-		window.addEventListener('click', onClick)
-		return () => window.removeEventListener('click', onClick)
-	}, [media.length])
-
-	// ⬅️ ЄДИНА УМОВА
+function VideoCaption({
+	media,
+	isPlaying,
+	index
+}: {
+	media: MediaItem[]
+	isPlaying: boolean
+	index: number
+}) {
 	if (!isPlaying) return null
 
 	return (
