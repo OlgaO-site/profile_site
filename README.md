@@ -75,5 +75,5 @@ npm run deploy
 ## Notes
 
 - Firebase is used for authentication and database management
-- Supabase is used for storing video and image files
+- Cloudflare is used for storing video and image files
 - Environment variables are required for the application to work correctly
