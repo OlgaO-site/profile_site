@@ -11,7 +11,7 @@ Administrators can upload videos, create and edit pages, and manage their contac
 - Client-facing part for browsing video content
 - Admin panel for managing videos and media
 - Short videos organized by thematic sections
-- Video and image storage via Supabase
+- Video and image storage via Cloudflare
 - Authentication and database via Firebase
 - Responsive UI
 - Media uploads and previews
@@ -23,7 +23,7 @@ Administrators can upload videos, create and edit pages, and manage their contac
 - **UI:** React, Tailwind CSS
 - **Forms:** React Hook Form
 - **Media & UI:** Three.js, @react-three/fiber, @react-three/drei
-- **Storage:** Supabase (videos & images)
+- **Storage:** Cloudflare (videos & images)
 - **Auth & Database:** Firebase
 - **HTTP Client:** Axios
 
