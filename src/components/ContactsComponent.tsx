@@ -3,8 +3,6 @@ import { PageFormValues } from './PageEditor'
 const ContactsComponent = ({ data }: { data: PageFormValues }) => {
 	const { email, instagram, instaLink } = data
 
-	console.log('Contacts', data)
-
 	return (
 		<div className='flex flex-col justify-center w-fit xl:w-100 mt-14 xl:mt-0 mx-auto xl:mb-0'>
 			<h1 className='text-[15px] xl:text-[40px] text-nav font-semibold playfair leading-none'>

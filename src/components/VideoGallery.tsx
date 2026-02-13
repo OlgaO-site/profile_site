@@ -15,60 +15,63 @@ export type MediaItem = {
 }
 
 const ASPECT = 2 / 3
-
-// TODO: цей компонент тільки для відео: якщо у галерею додавати фото, то якість фото виходить гіршою, зображення темніші, ніж є у реальності. Для фотогалереї треба використовувати PhotoGalleryCanvas. Відрізняється від фото налаштуваннями канви: немає flat + linear
+const MAX_HEIGHT_RATIO = 0.65
 
 export default function VideoGallery({ media }: { media: MediaItem[] }) {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const canvasWrapperRef = useRef<HTMLDivElement>(null)
 
 	const [containerWidth, setContainerWidth] = useState(224)
+	const [containerHeight, setContainerHeight] = useState(224 / ASPECT)
 	const [isPlaying, setIsPlaying] = useState(false)
-
 	const [offsetY, setOffsetY] = useState(0)
-
 	const [currentIndex, setCurrentIndex] = useState(0)
 
 	useEffect(() => {
 		const updateLayout = () => {
-			const h = window.visualViewport?.height ?? window.innerHeight
+			const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+
+			const maxHeight = viewportHeight * MAX_HEIGHT_RATIO
 			const isMobile = window.matchMedia('(max-width: 768px)').matches
+			const h = viewportHeight
+
+			let baseWidth = 317
 
 			if (isMobile) {
 				if (h <= 550) {
-					setContainerWidth(280)
 					setOffsetY(10)
 				} else if (h <= 650) {
-					setContainerWidth(290)
 					setOffsetY(10)
 				} else if (h <= 750) {
-					setContainerWidth(300)
 					setOffsetY(0)
 				} else {
-					setContainerWidth(317)
 					setOffsetY(0)
 				}
 			} else {
-				if (h <= 400) {
-					setContainerWidth(200)
-					setOffsetY(50)
+				if (h <= 450) {
+					setOffsetY(-5)
 				} else if (h <= 550) {
-					setContainerWidth(240)
-					setOffsetY(0)
+					setOffsetY(-15)
 				} else if (h <= 700) {
-					setContainerWidth(280)
 					setOffsetY(-10)
 				} else if (h <= 800) {
-					setContainerWidth(280)
 					setOffsetY(-10)
 				} else if (h <= 900) {
-					setContainerWidth(300)
 					setOffsetY(-20)
 				} else {
-					setContainerWidth(317)
 					setOffsetY(-50)
 				}
 			}
+
+			let calculatedHeight = baseWidth / ASPECT
+
+			if (calculatedHeight > maxHeight) {
+				calculatedHeight = maxHeight
+				baseWidth = calculatedHeight * ASPECT
+			}
+
+			setContainerWidth(baseWidth)
+			setContainerHeight(calculatedHeight)
 		}
 
 		updateLayout()
@@ -84,9 +87,10 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 	return (
 		<div
 			ref={containerRef}
-			className='aspect-2/3 h-auto relative'
+			className='relative'
 			style={{
 				width: `${containerWidth}px`,
+				height: `${containerHeight}px`,
 				transform: `translateY(${offsetY}px)`
 			}}
 		>
@@ -114,7 +118,8 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 				<VideoCaption
 					media={media}
 					isPlaying={isPlaying}
-					index={currentIndex} // ⬅️ тепер синхрон
+					index={currentIndex}
+					containerHeight={containerHeight}
 				/>
 			</div>
 		</div>
@@ -142,10 +147,9 @@ function Gallery({
 	const [textures, setTextures] = useState<THREE.Texture[]>([])
 	const animationSpeed = 0.05
 	const touchStartX = useRef<number | null>(null)
-	// ⬅️ щоб не викликати setIsPlaying багато разів
 	const playingReportedRef = useRef(false)
 
-	// 1️⃣ Завантаження текстур
+	// завантаження текстур — без змін
 	useEffect(() => {
 		if (media.length === 0) return
 
@@ -163,7 +167,6 @@ function Gallery({
 					texture.needsUpdate = true
 					texs.push(texture)
 
-					// якщо перший елемент — фото, можна вважати готовим одразу
 					if (i === 0 && !playingReportedRef.current) {
 						playingReportedRef.current = true
 						setIsPlaying(true)
@@ -209,7 +212,34 @@ function Gallery({
 		}
 	}, [media, setIsPlaying])
 
-	// 2️⃣ Click navigation
+	// 🔥 ОНОВЛЕНИЙ ResizeObserver з 65vh
+	useEffect(() => {
+		if (!containerRef.current) return
+		const el = containerRef.current
+
+		const update = () => {
+			const viewportHeight = window.visualViewport?.height ?? window.innerHeight
+			const maxHeight = viewportHeight * MAX_HEIGHT_RATIO
+
+			let w = el.clientWidth
+			let h = w / ASPECT
+
+			if (h > maxHeight) {
+				h = maxHeight
+				w = h * ASPECT
+			}
+
+			setSize({ w, h })
+		}
+
+		update()
+		const ro = new ResizeObserver(update)
+		ro.observe(el)
+		return () => ro.disconnect()
+	}, [containerRef])
+
+	// 🔽 ДАЛІ ВСЯ ТВОЯ НАВІГАЦІЯ ЗАЛИШЕНА БЕЗ ЗМІН
+
 	useEffect(() => {
 		const onClick = (e: MouseEvent) => {
 			if (nextIndex !== null) return
@@ -223,27 +253,11 @@ function Gallery({
 		return () => window.removeEventListener('click', onClick)
 	}, [currentIndex, nextIndex, media.length])
 
-	// 3️⃣ Resize
-	useEffect(() => {
-		if (!containerRef.current) return
-		const el = containerRef.current
-		const update = () => {
-			const w = el.clientWidth
-			const h = w / ASPECT
-			setSize({ w, h })
-		}
-		update()
-		const ro = new ResizeObserver(update)
-		ro.observe(el)
-		return () => ro.disconnect()
-	}, [containerRef])
-
-	// 2.5️⃣ Swipe navigation (mobile)
 	useEffect(() => {
 		const el = canvasRef.current
 		if (!el) return
 
-		const threshold = 40 // px
+		const threshold = 40
 
 		const onTouchStart = (e: TouchEvent) => {
 			touchStartX.current = e.touches[0].clientX
@@ -251,10 +265,8 @@ function Gallery({
 
 		const onTouchEnd = (e: TouchEvent) => {
 			if (touchStartX.current === null || nextIndex !== null) return
-
 			const endX = e.changedTouches[0].clientX
 			const deltaX = endX - touchStartX.current
-
 			if (Math.abs(deltaX) < threshold) return
 
 			if (deltaX > 0) {
@@ -275,7 +287,6 @@ function Gallery({
 		}
 	}, [currentIndex, nextIndex, media.length])
 
-	// 4️⃣ Transition animation
 	useFrame(() => {
 		if (nextIndex !== null) {
 			setTransitionProgress(p => {
@@ -290,7 +301,6 @@ function Gallery({
 		}
 	})
 
-	// 5️⃣ Cursor
 	useEffect(() => {
 		const onMouseMove = (e: MouseEvent) => {
 			if (e.clientX < window.innerWidth / 2) {
@@ -333,18 +343,20 @@ function Gallery({
 function VideoCaption({
 	media,
 	isPlaying,
-	index
+	index,
+	containerHeight
 }: {
 	media: MediaItem[]
 	isPlaying: boolean
 	index: number
+	containerHeight: number
 }) {
 	if (!isPlaying) return null
 
 	return (
-		<div className='w-full mt-6 xl:mt-8'>
+		<div className={`w-full mt-6 ${containerHeight < 400 ? 'md:mt-4' : 'md:mt-8'}`}>
 			<p
-				className={`min-h-3.5 xl:text-lg text-center xl:text-left w-full tracking-1 leading-none xl:mt-[1em] ${playfairDisplay.className} relative z-50`}
+				className={`min-h-3.5 xl:text-lg text-center md:text-left w-full tracking-1 leading-none ${containerHeight < 400 ? 'md:mt-[0.5em]' : 'md:mt-[1em]'} ${playfairDisplay.className} relative z-50`}
 			>
 				{media[index]?.name}
 			</p>

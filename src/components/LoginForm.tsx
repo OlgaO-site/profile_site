@@ -21,7 +21,7 @@ export function LoginForm() {
 		try {
 			const user = await login(data.email, data.password)
 			toast.success('Авторизація успішна:')
-			console.log(user)
+
 			// наприклад, можна робити редірект в адмінку
 			router.push('/admin')
 		} catch (error) {

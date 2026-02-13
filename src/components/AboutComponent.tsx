@@ -3,8 +3,6 @@ import { PageFormValues } from './PageEditor'
 const AboutComponent = ({ data }: { data: PageFormValues }) => {
 	const { firstText, secondText, thirdText } = data
 
-	console.log('About', data)
-
 	return (
 		<div className='flex flex-col w-56.5 xl:w-152.5 mx-auto mt-45 xl:mb-0 xl:mt-0 playfair tracking-3!'>
 			{firstText && (
