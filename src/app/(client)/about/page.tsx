@@ -1,6 +1,7 @@
 import { fetchPageBySlug } from '@/src/api/pages'
 import AboutComponent from '@/src/components/AboutComponent'
 import BaseSection from '@/src/components/BaseSection'
+import NotFoundComponent from '@/src/components/NotFoundComponent'
 
 import { Metadata } from 'next'
 
@@ -18,7 +19,7 @@ export default async function About() {
 		return (
 			<main className='w-full h-full flex flex-col items-center xl:justify-center'>
 				<BaseSection className='flex items-center xl:justify-center'>
-					<p>Сторінку не знайдено</p>
+					<NotFoundComponent />
 				</BaseSection>
 			</main>
 		)
