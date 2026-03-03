@@ -17,7 +17,7 @@ export type MediaItem = {
 const ASPECT = 2 / 3
 const MAX_HEIGHT_RATIO = 0.65
 
-export default function VideoGallery({ media }: { media: MediaItem[] }) {
+export default function VideoGalleryStableFade({ media }: { media: MediaItem[] }) {
 	const containerRef = useRef<HTMLDivElement>(null)
 	const canvasWrapperRef = useRef<HTMLDivElement>(null)
 
@@ -30,7 +30,6 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 	useEffect(() => {
 		const updateLayout = () => {
 			const viewportHeight = window.visualViewport?.height ?? window.innerHeight
-
 			const maxHeight = viewportHeight * MAX_HEIGHT_RATIO
 			const isMobile = window.matchMedia('(max-width: 768px)').matches
 			const h = viewportHeight
@@ -38,29 +37,13 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 			let baseWidth = 317
 
 			if (isMobile) {
-				if (h <= 550) {
-					setOffsetY(10)
-				} else if (h <= 650) {
-					setOffsetY(10)
-				} else if (h <= 750) {
-					setOffsetY(0)
-				} else {
-					setOffsetY(0)
-				}
+				setOffsetY(h <= 650 ? 10 : 0)
 			} else {
-				if (h <= 450) {
-					setOffsetY(-5)
-				} else if (h <= 550) {
-					setOffsetY(-15)
-				} else if (h <= 700) {
-					setOffsetY(-10)
-				} else if (h <= 800) {
-					setOffsetY(-10)
-				} else if (h <= 900) {
-					setOffsetY(-20)
-				} else {
-					setOffsetY(-50)
-				}
+				if (h <= 450) setOffsetY(-5)
+				else if (h <= 550) setOffsetY(-15)
+				else if (h <= 800) setOffsetY(-10)
+				else if (h <= 900) setOffsetY(-20)
+				else setOffsetY(-50)
 			}
 
 			let calculatedHeight = baseWidth / ASPECT
@@ -104,7 +87,7 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 							toneMapping: THREE.NoToneMapping
 						}}
 					>
-						<Gallery
+						<GalleryStableFade
 							media={media}
 							containerRef={containerRef}
 							canvasRef={canvasWrapperRef}
@@ -126,10 +109,9 @@ export default function VideoGallery({ media }: { media: MediaItem[] }) {
 	)
 }
 
-function Gallery({
+function GalleryStableFade({
 	media,
 	containerRef,
-	canvasRef,
 	setIsPlaying,
 	currentIndex,
 	setCurrentIndex
@@ -143,74 +125,118 @@ function Gallery({
 }) {
 	const [nextIndex, setNextIndex] = useState<number | null>(null)
 	const [size, setSize] = useState({ w: 0, h: 0 })
-	const [transitionProgress, setTransitionProgress] = useState(0)
-	const [textures, setTextures] = useState<THREE.Texture[]>([])
+	const [fade, setFade] = useState(0)
+
+	const texturesRef = useRef<(THREE.Texture | null)[]>([])
+	const videosRef = useRef<(HTMLVideoElement | null)[]>([])
+
 	const animationSpeed = 0.05
-	const touchStartX = useRef<number | null>(null)
-	const playingReportedRef = useRef(false)
+
+	// -------- LOAD ONCE (стабільність)
+	// useEffect(() => {
+	// 	if (!media.length) return
+
+	// 	const loader = new THREE.TextureLoader()
+
+	// 	media.forEach((item, i) => {
+	// 		if (item.type === 'photo') {
+	// 			loader.load(item.url, texture => {
+	// 				texture.colorSpace = THREE.SRGBColorSpace
+	// 				texturesRef.current[i] = texture
+	// 			})
+	// 		} else {
+	// 			const video = document.createElement('video')
+	// 			video.src = item.url
+	// 			video.crossOrigin = 'anonymous'
+	// 			video.loop = true
+	// 			video.muted = true
+	// 			video.playsInline = true
+	// 			video.preload = 'auto'
+
+	// 			video.addEventListener(
+	// 				'loadeddata',
+	// 				() => {
+	// 					const texture = new THREE.VideoTexture(video)
+	// 					texture.colorSpace = THREE.SRGBColorSpace
+	// 					texturesRef.current[i] = texture
+
+	// 					if (i === 0) {
+	// 						video
+	// 							.play()
+	// 							.then(() => setIsPlaying(true))
+	// 							.catch(() => {})
+	// 					}
+	// 				},
+	// 				{ once: true }
+	// 			)
+
+	// 			videosRef.current[i] = video
+	// 		}
+	// 	})
+
+	// 	return () => {
+	// 		texturesRef.current.forEach(tex => tex?.dispose())
+	// 		videosRef.current.forEach(video => {
+	// 			video?.pause()
+	// 			if (video) video.src = ''
+	// 		})
+	// 	}
+	// }, [media])
 
 	useEffect(() => {
-		if (media.length === 0) return
+		if (!media.length) return
 
-		const loader = new THREE.TextureLoader()
-		const texs: THREE.Texture[] = []
-		const videos: HTMLVideoElement[] = []
+		const ensureLoaded = (index: number) => {
+			if (texturesRef.current[index]) return
 
-		const loadAll = async () => {
-			for (let i = 0; i < media.length; i++) {
-				const item = media[i]
+			const item = media[index]
 
-				if (item.type === 'photo') {
-					const texture = await loader.loadAsync(item.url)
+			if (item.type === 'photo') {
+				const loader = new THREE.TextureLoader()
+				loader.load(item.url, texture => {
 					texture.colorSpace = THREE.SRGBColorSpace
-					texture.needsUpdate = true
-					texs.push(texture)
-
-					if (i === 0 && !playingReportedRef.current) {
-						playingReportedRef.current = true
-						setIsPlaying(true)
-					}
-				} else {
-					const video = document.createElement('video')
-					video.src = item.url
-					video.crossOrigin = 'anonymous'
-					video.loop = true
-					video.muted = true
-					video.playsInline = true
-					video.preload = 'auto'
-
-					if (i === 0) {
-						video.requestVideoFrameCallback(() => {
-							if (!playingReportedRef.current) {
-								playingReportedRef.current = true
-								setIsPlaying(true)
-							}
-						})
-					}
-
-					await video.play().catch(() => {})
-					const texture = new THREE.VideoTexture(video)
-
-					texs.push(texture)
-					videos.push(video)
-				}
+					texturesRef.current[index] = texture
+				})
+				return
 			}
 
-			setTextures(texs)
+			const video = document.createElement('video')
+			video.src = item.url
+			video.crossOrigin = 'anonymous'
+			video.loop = true
+			video.muted = true
+			video.playsInline = true
+			video.preload = 'auto'
+
+			video.addEventListener(
+				'loadeddata',
+				() => {
+					const texture = new THREE.VideoTexture(video)
+					texture.colorSpace = THREE.SRGBColorSpace
+					texturesRef.current[index] = texture
+
+					if (index === currentIndex) {
+						video
+							.play()
+							.then(() => setIsPlaying(true))
+							.catch(() => {})
+					}
+				},
+				{ once: true }
+			)
+
+			videosRef.current[index] = video
 		}
 
-		loadAll()
+		const prev = (currentIndex - 1 + media.length) % media.length
+		const next = (currentIndex + 1) % media.length
 
-		return () => {
-			texs.forEach(tex => tex?.dispose())
-			videos.forEach(video => {
-				video.pause()
-				video.src = ''
-				video.load()
-			})
-		}
-	}, [media, setIsPlaying])
+		ensureLoaded(prev)
+		ensureLoaded(currentIndex)
+		ensureLoaded(next)
+	}, [currentIndex, media])
 
+	// -------- RESIZE
 	useEffect(() => {
 		if (!containerRef.current) return
 		const el = containerRef.current
@@ -236,6 +262,7 @@ function Gallery({
 		return () => ro.disconnect()
 	}, [containerRef])
 
+	// -------- NAV
 	useEffect(() => {
 		const onClick = (e: MouseEvent) => {
 			if (nextIndex !== null) return
@@ -249,54 +276,26 @@ function Gallery({
 		return () => window.removeEventListener('click', onClick)
 	}, [currentIndex, nextIndex, media.length])
 
-	useEffect(() => {
-		const el = canvasRef.current
-		if (!el) return
-
-		const threshold = 40
-
-		const onTouchStart = (e: TouchEvent) => {
-			touchStartX.current = e.touches[0].clientX
-		}
-
-		const onTouchEnd = (e: TouchEvent) => {
-			if (touchStartX.current === null || nextIndex !== null) return
-			const endX = e.changedTouches[0].clientX
-			const deltaX = endX - touchStartX.current
-			if (Math.abs(deltaX) < threshold) return
-
-			if (deltaX > 0) {
-				setNextIndex((currentIndex - 1 + media.length) % media.length)
-			} else {
-				setNextIndex((currentIndex + 1) % media.length)
-			}
-
-			touchStartX.current = null
-		}
-
-		el.addEventListener('touchstart', onTouchStart, { passive: true })
-		el.addEventListener('touchend', onTouchEnd)
-
-		return () => {
-			el.removeEventListener('touchstart', onTouchStart)
-			el.removeEventListener('touchend', onTouchEnd)
-		}
-	}, [currentIndex, nextIndex, media.length])
-
 	useFrame(() => {
 		if (nextIndex !== null) {
-			setTransitionProgress(p => {
-				const nextP = p + animationSpeed
-				if (nextP >= 1) {
+			setFade(prev => {
+				const next = prev + animationSpeed
+				if (next >= 1) {
+					videosRef.current[currentIndex]?.pause()
+					videosRef.current[nextIndex]?.play().catch(() => {})
 					setCurrentIndex(nextIndex)
 					setNextIndex(null)
 					return 0
 				}
-				return nextP
+				return next
 			})
 		}
 	})
 
+	const currentTexture = texturesRef.current[currentIndex]
+	const nextTexture = nextIndex !== null ? texturesRef.current[nextIndex] : null
+
+	// -------- MOUSE NAV CURSOR
 	useEffect(() => {
 		const onMouseMove = (e: MouseEvent) => {
 			if (e.clientX < window.innerWidth / 2) {
@@ -312,21 +311,64 @@ function Gallery({
 		}
 	}, [])
 
+	// -------- TOUCH NAV
+	useEffect(() => {
+		const el = containerRef.current
+		if (!el) return
+
+		let startX: number | null = null
+		const threshold = 40
+
+		const onTouchStart = (e: TouchEvent) => {
+			startX = e.touches[0].clientX
+		}
+
+		const onTouchEnd = (e: TouchEvent) => {
+			if (startX === null || nextIndex !== null) return
+
+			const endX = e.changedTouches[0].clientX
+			const deltaX = endX - startX
+
+			if (Math.abs(deltaX) < threshold) return
+
+			if (deltaX > 0) {
+				setNextIndex((currentIndex - 1 + media.length) % media.length)
+			} else {
+				setNextIndex((currentIndex + 1) % media.length)
+			}
+
+			startX = null
+		}
+
+		el.addEventListener('touchstart', onTouchStart, { passive: true })
+		el.addEventListener('touchend', onTouchEnd)
+
+		return () => {
+			el.removeEventListener('touchstart', onTouchStart)
+			el.removeEventListener('touchend', onTouchEnd)
+		}
+	}, [currentIndex, nextIndex, media.length])
+
 	return (
 		<>
-			{textures[currentIndex] && size.w > 0 && (
-				<mesh>
-					<planeGeometry args={[size.w, size.h]} />
-					<meshBasicMaterial map={textures[currentIndex]} toneMapped={false} />
-				</mesh>
-			)}
-
-			{nextIndex !== null && textures[nextIndex] && size.w > 0 && (
+			{currentTexture && size.w > 0 && (
 				<mesh>
 					<planeGeometry args={[size.w, size.h]} />
 					<meshBasicMaterial
-						map={textures[nextIndex]}
-						opacity={transitionProgress}
+						map={currentTexture}
+						opacity={nextIndex ? Math.max(0.001, 1 - fade) : 1}
+						transparent
+						toneMapped={false}
+					/>
+				</mesh>
+			)}
+
+			{nextTexture && size.w > 0 && (
+				<mesh>
+					<planeGeometry args={[size.w, size.h]} />
+					<meshBasicMaterial
+						map={nextTexture}
+						opacity={Math.max(0.001, fade)}
 						transparent
 						toneMapped={false}
 					/>
