@@ -4,15 +4,10 @@
 import { Canvas, useFrame } from '@react-three/fiber'
 
 import { playfairDisplay } from '../app/layout'
+import { MediaItem } from '../types/baseTypes'
 
 import { useEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
-
-export type MediaItem = {
-	name: string
-	type: 'video' | 'photo'
-	url: string
-}
 
 const ASPECT = 2 / 3
 const MAX_HEIGHT_RATIO = 0.65
