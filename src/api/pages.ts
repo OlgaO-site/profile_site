@@ -1,7 +1,7 @@
 import { db } from '@/services/firebase'
 
-import { MediaItem } from '../components/VideoGallery'
 import { PageValues } from '../components/PageEditor'
+import { MediaItem } from '../types/baseTypes'
 
 import { collection, getDocs, query, where } from 'firebase/firestore'
 
