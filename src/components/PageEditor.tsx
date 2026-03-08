@@ -5,8 +5,7 @@ import { db } from '@/services/firebase'
 import { toast } from '../lib/toast'
 
 import { addDoc, collection, doc, getDoc, updateDoc } from 'firebase/firestore'
-import Image from 'next/image'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useFieldArray, useForm } from 'react-hook-form'
 
 export type PageType = 'default' | 'about' | 'contacts'
@@ -15,6 +14,7 @@ export type MediaItemForm = {
 	name: string
 	type: 'video' | 'photo'
 	url: string | File
+	mobileUrl?: string | File
 }
 
 export type PageValues = {
@@ -71,10 +71,9 @@ const PageEditor = ({ id }: { id?: string }) => {
 		}
 	})
 
-	const [replaceMode, setReplaceMode] = useState<Record<number, boolean>>({})
+	const [replaceMode, setReplaceMode] = useState<Record<string | number, boolean>>({})
 	const [isUploading, setIsUploading] = useState(false)
 	const [isLoaded, setIsLoaded] = useState(!id)
-	const fileRefs = useRef<(HTMLInputElement | null)[]>([])
 
 	const slug = watch('slug')
 
@@ -82,7 +81,7 @@ const PageEditor = ({ id }: { id?: string }) => {
 	const isContacts = slug === 'contact' || slug === 'contacts'
 	const isDefaultPage = !isAbout && !isContacts
 
-	// slug автогенерація
+	// slug
 	useEffect(() => {
 		const subscription = watch((value, { name }) => {
 			if (name === 'title') {
@@ -107,7 +106,6 @@ const PageEditor = ({ id }: { id?: string }) => {
 		name: 'media'
 	})
 
-	// Завантаження для редагування
 	useEffect(() => {
 		if (!id) return
 		async function load() {
@@ -185,19 +183,22 @@ const PageEditor = ({ id }: { id?: string }) => {
 			if (isDefaultPage && data.media) {
 				preparedMedia = await Promise.all(
 					data.media.map(async m => {
-						if (m.url instanceof File) {
-							const uploadedUrl = await uploadToR2(m.url)
-							return { ...m, url: uploadedUrl }
+						const item = { ...m }
+
+						if (item.url instanceof File) {
+							item.url = await uploadToR2(item.url)
 						}
-						return m
+
+						if (item.type === 'video' && item.mobileUrl instanceof File) {
+							item.mobileUrl = await uploadToR2(item.mobileUrl)
+						} else if (!(item.mobileUrl instanceof File) && !item.mobileUrl) {
+							delete item.mobileUrl
+						}
+
+						return item
 					})
 				)
 			}
-
-			// const preparedData: PageFormValues = {
-			// 	...data,
-			// 	...(isDefaultPage ? { media: preparedMedia } : {})
-			// }
 
 			const preparedData: PageFormValues = {
 				title: data.title,
@@ -233,6 +234,8 @@ const PageEditor = ({ id }: { id?: string }) => {
 				await addDoc(collection(db, 'pages'), preparedData)
 				toast.success('Page created')
 			}
+
+			setReplaceMode({})
 
 			reset(preparedData)
 		} catch (e) {
@@ -304,78 +307,65 @@ const PageEditor = ({ id }: { id?: string }) => {
 			)}
 
 			{isLoaded && isDefaultPage && (
-				<>
-					<h2 className='text-nav text-xl font-semibold'>Media</h2>
+				<div className='flex flex-col gap-6 mt-4'>
+					<h2 className='text-nav text-xl font-semibold border-b pb-2'>Media Items</h2>
 
 					{mediaFields.map((field, index) => {
-						const isUploaded = typeof field.url === 'string' && field.url.length > 0
+						const type = watch(`media.${index}.type`)
+						const isUrlUploaded = typeof field.url === 'string' && field.url.length > 0
+						const isMobileUploaded =
+							typeof field.mobileUrl === 'string' && field.mobileUrl.length > 0
 
 						return (
 							<div
 								key={field.id}
-								className='mb-4 flex items-center justify-between gap-3'
+								className='relative p-6 rounded-lg border border-slate-200 bg-slate-50/50 flex flex-col gap-4 shadow-sm'
 							>
-								<select
-									{...register(`media.${index}.type` as const)}
-									className='mb-1 w-1/4 outline-none border-b border-b-nav active:border-b-dark-purple focus:border-b-dark-purple transition-all duration-300 ease-in-out focus:outline-none'
-								>
-									<option value='video'>Video</option>
-									<option value='photo'>Photo</option>
-								</select>
+								{/* Верхня панель: Тип та Видалення */}
+								<div className='flex justify-between items-center gap-4'>
+									<div className='flex items-center gap-4 w-full'>
+										<select
+											{...register(`media.${index}.type` as const)}
+											className='p-2 rounded border border-slate-300 outline-none focus:border-dark-purple bg-white text-sm'
+										>
+											<option value='video'>🎥 Video</option>
+											<option value='photo'>🖼️ Photo</option>
+										</select>
 
-								{watch(`media.${index}.type`) === 'video' && (
-									<div className='flex flex-col gap-1 w-1/4'>
-										{isUploaded && !replaceMode[index] ? (
-											<div className='flex items-center justify-center gap-4'>
-												<span className='text-sm text-green-600'>File</span>
-												<button
-													type='button'
-													className='text-sm text-blue-500 hover:underline'
-													onClick={() => {
-														setReplaceMode(prev => ({
-															...prev,
-															[index]: true
-														}))
-														setTimeout(() => {
-															fileRefs.current[index]?.click()
-														}, 0)
-													}}
-												>
-													Update
-												</button>
-											</div>
-										) : (
-											<input
-												type='file'
-												accept='video/*'
-												ref={el => {
-													fileRefs.current[index] = el
-												}}
-												onChange={e => {
-													const file = e.target.files?.[0]
-													if (!file) return
-													setValue(`media.${index}.url`, file)
-												}}
-												className='outline-none border-b border-b-nav active:border-b-dark-purple focus:border-b-dark-purple transition-all duration-300 ease-in-out focus:outline-none'
-											/>
-										)}
+										<input
+											placeholder='Media description / label'
+											{...register(`media.${index}.name` as const)}
+											className='flex-1 p-2 bg-white border border-slate-300 rounded outline-none focus:border-dark-purple text-sm'
+										/>
 									</div>
-								)}
 
-								{watch(`media.${index}.type`) === 'photo' && (
-									<div className='flex flex-col gap-1 w-1/4'>
-										{isUploaded && !replaceMode[index] ? (
-											<div className='flex items-center justify-center gap-4'>
-												<Image
-													src={field.url as string}
-													width={100}
-													height={100}
-													alt='preview'
-													className='w-24 h-24 object-cover rounded'
-												/>
+									<button
+										type='button'
+										onClick={() => removeMedia(index)}
+										className='text-red-400 hover:text-red-600 transition-colors text-sm font-medium'
+									>
+										Remove
+									</button>
+								</div>
+
+								{/* Секція завантаження файлів */}
+								<div
+									className={`grid ${type === 'video' ? 'grid-cols-2' : 'grid-cols-1'} gap-6`}
+								>
+									{/* Desktop / Main Media */}
+									<div className='flex flex-col gap-2 p-3 bg-white rounded border border-dashed border-slate-300'>
+										<span className='text-[10px] font-bold text-slate-400 uppercase tracking-wider'>
+											{type === 'video' ? 'Desktop Video' : 'Photo Content'}
+										</span>
+
+										{isUrlUploaded && !replaceMode[index] ? (
+											<div className='flex items-center justify-between'>
+												<span className='text-xs text-green-600 font-medium'>
+													✓ Uploaded
+												</span>
 												<button
 													type='button'
-													className='text-sm text-blue-500 hover:underline'
+													className='text-xs text-nav hover:underline'
 													onClick={() =>
 														setReplaceMode(prev => ({
 															...prev,
@@ -383,55 +373,77 @@ const PageEditor = ({ id }: { id?: string }) => {
 														}))
 													}
 												>
-													Update
+													Change File
 												</button>
 											</div>
 										) : (
 											<input
 												type='file'
-												accept='image/*'
+												accept={type === 'video' ? 'video/*' : 'image/*'}
 												onChange={e => {
 													const file = e.target.files?.[0]
-													if (!file) return
-													setValue(`media.${index}.url`, file)
+													if (file) setValue(`media.${index}.url`, file)
 												}}
-												className='outline-none border-b border-b-nav active:border-b-dark-purple focus:border-b-dark-purple transition-all duration-300 ease-in-out focus:outline-none'
+												className='text-xs file:mr-4 file:py-1 file:px-4 file:rounded file:border-0 file:text-xs file:bg-slate-100 file:text-slate-700 hover:file:bg-slate-200 cursor-pointer'
 											/>
 										)}
 									</div>
-								)}
 
-								<input
-									placeholder='description'
-									{...register(`media.${index}.name` as const)}
-									className='mb-1 w-1/4 outline-none border-b border-b-nav active:border-b-dark-purple focus:border-b-dark-purple transition-all duration-300 ease-in-out focus:outline-none'
-								/>
+									{/* Mobile Video (показуємо тільки для відео) */}
+									{type === 'video' && (
+										<div className='flex flex-col gap-2 p-3 bg-white rounded border border-dashed border-slate-300'>
+											<span className='text-[10px] font-bold text-slate-400 uppercase tracking-wider'>
+												Mobile Video (Optional)
+											</span>
 
-								<button
-									type='button'
-									onClick={() => removeMedia(index)}
-									className='hover:text-nav transform duration-300 cursor-pointer'
-								>
-									Delete
-								</button>
+											{isMobileUploaded && !replaceMode[`${index}_mobile`] ? (
+												<div className='flex items-center justify-between'>
+													<span className='text-xs text-green-600 font-medium'>
+														✓ Uploaded
+													</span>
+													<button
+														type='button'
+														className='text-xs text-nav hover:underline'
+														onClick={() =>
+															setReplaceMode(prev => ({
+																...prev,
+																[`${index}_mobile`]: true
+															}))
+														}
+													>
+														Change Mobile
+													</button>
+												</div>
+											) : (
+												<input
+													type='file'
+													accept='video/*'
+													onChange={e => {
+														const file = e.target.files?.[0]
+														if (file)
+															setValue(
+																`media.${index}.mobileUrl`,
+																file
+															)
+													}}
+													className='text-xs file:mr-4 file:py-1 file:px-4 file:rounded file:border-0 file:text-xs file:bg-blue-50 file:text-nav hover:file:bg-blue-100 cursor-pointer'
+												/>
+											)}
+										</div>
+									)}
+								</div>
 							</div>
 						)
 					})}
 
 					<button
 						type='button'
-						onClick={() =>
-							addMedia({
-								type: 'video',
-								url: '',
-								name: ''
-							})
-						}
-						className='hover:text-nav transform duration-300 cursor-pointer'
+						onClick={() => addMedia({ type: 'video', url: '', name: '' })}
+						className='mt-2 py-4 border-2 border-dashed border-slate-300 rounded-xl text-slate-400 hover:text-nav hover:border-nav transition-all font-medium'
 					>
-						+ media item
+						+ Add Media Item
 					</button>
-				</>
+				</div>
 			)}
 
 			{isLoaded && isAbout && (
