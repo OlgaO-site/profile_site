@@ -9,6 +9,12 @@ import { MediaItem } from '../types/baseTypes'
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import * as THREE from 'three'
 
+const getMediaUrl = (item: MediaItem): string => {
+	if (typeof window !== 'undefined' && window.innerWidth <= 768 && item.mobileUrl) {
+		return item.mobileUrl
+	}
+	return item.url
+}
 interface GalleryProps {
 	media: MediaItem[]
 	size: { w: number; h: number }
@@ -140,7 +146,10 @@ function Gallery({ media, size, currentIndex, setCurrentIndex, setIsPlaying }: G
 			(currIdx + 1) % media.length,
 			(currIdx - 1 + media.length) % media.length
 		]
-		const activeUrls = indices.map(i => media[i].url)
+
+		const activeUrls = indices.map(i => getMediaUrl(media[i]))
+
+		const currentActiveUrl = getMediaUrl(media[currIdx])
 
 		activeUrls.forEach(url => {
 			if (!cache.current.has(url)) {
@@ -153,17 +162,18 @@ function Gallery({ media, size, currentIndex, setCurrentIndex, setIsPlaying }: G
 				v.crossOrigin = 'anonymous'
 				v.preload = 'auto'
 
-				if (url === media[currIdx].url) {
+				if (url === currentActiveUrl) {
 					v.onplaying = () => setIsReady(true)
 				}
 
 				v.play().catch(() => {})
 				const t = new THREE.VideoTexture(v)
-
 				cache.current.set(url, { v, t })
-			} else if (url === media[currIdx].url) {
+			} else if (url === currentActiveUrl) {
 				const cached = cache.current.get(url)
-				if (cached && cached.v.readyState >= 3) setIsReady(true)
+				if (cached && cached.v.readyState >= 3) {
+					setIsReady(true)
+				}
 			}
 		})
 
@@ -251,8 +261,11 @@ function Gallery({ media, size, currentIndex, setCurrentIndex, setIsPlaying }: G
 			}
 		}
 
-		const prev = cache.current.get(media[state.current.prevIndex].url)?.t
-		const curr = cache.current.get(media[currentIndex].url)?.t
+		const prevUrl = getMediaUrl(media[state.current.prevIndex])
+		const currUrl = getMediaUrl(media[currentIndex])
+
+		const prev = cache.current.get(prevUrl)?.t
+		const curr = cache.current.get(currUrl)?.t
 
 		if (prev) materialRef.current.uniforms.tPrev.value = prev
 		if (curr) materialRef.current.uniforms.tCurrent.value = curr
@@ -275,7 +288,7 @@ function Gallery({ media, size, currentIndex, setCurrentIndex, setIsPlaying }: G
 	}, [])
 
 	useLayoutEffect(() => {
-		setIsReady(false) // Ховаємо галерею перед завантаженням нових медіа
+		setIsReady(false)
 		state.current.progress = 1
 		state.current.isTransitioning = false
 		state.current.prevIndex = currentIndex
