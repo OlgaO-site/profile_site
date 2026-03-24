@@ -65,6 +65,11 @@ export default function NewVideoGallery({ media }: { media: MediaItem[] }) {
 	const [offsetY, setOffsetY] = useState(0)
 	const [currentIndex, setCurrentIndex] = useState(0)
 	const [isPlaying, setIsPlaying] = useState(false)
+	const [isMounted, setIsMounted] = useState(false) // Новий стан
+
+	useEffect(() => {
+		setIsMounted(true)
+	}, [])
 
 	useEffect(() => {
 		const updateLayout = () => {
@@ -96,6 +101,10 @@ export default function NewVideoGallery({ media }: { media: MediaItem[] }) {
 		}
 	}, [])
 
+	if (!isMounted) {
+		return <div style={{ width: 317, height: 317 / (2 / 3) }} />
+	}
+
 	return (
 		<div
 			ref={containerRef}
@@ -122,6 +131,23 @@ export default function NewVideoGallery({ media }: { media: MediaItem[] }) {
 					setIsPlaying={setIsPlaying}
 				/>
 			</Canvas>
+
+			{/* --- БЛОК ДЛЯ SAFARI --- */}
+			<div
+				style={{
+					position: 'absolute',
+					opacity: 0,
+					pointerEvents: 'none',
+					width: 0,
+					height: 0,
+					overflow: 'hidden'
+				}}
+			>
+				{media.map((item, i) => (
+					<video key={i} src={getMediaUrl(item)} preload='auto' muted playsInline />
+				))}
+			</div>
+			{/* ----------------------------------------------- */}
 
 			<VideoCaption
 				media={media}
@@ -157,33 +183,55 @@ function Gallery({ media, size, currentIndex, setCurrentIndex, setIsPlaying }: G
 				v.src = url
 				v.muted = true
 				v.loop = true
-				v.autoplay = true
+				v.autoplay = false
 				v.playsInline = true
+				// Додаємо специфічні атрибути для Safari
+				v.setAttribute('playsinline', '')
+				v.setAttribute('webkit-playsinline', 'true')
+				v.setAttribute('muted', '')
 				v.crossOrigin = 'anonymous'
-				v.preload = 'auto'
+				v.preload = 'auto' // Для Safari краще 'auto', ніж 'metadata'
 
 				if (url === currentActiveUrl) {
 					v.onplaying = () => setIsReady(true)
 				}
 
+				// Запускаємо відео відразу
 				v.play().catch(() => {})
+
 				const t = new THREE.VideoTexture(v)
+				// Обов'язкові фільтри для стабільності GPU
+				t.minFilter = THREE.LinearFilter
+				t.magFilter = THREE.LinearFilter
+				t.generateMipmaps = false
+
 				cache.current.set(url, { v, t })
 			} else if (url === currentActiveUrl) {
 				const cached = cache.current.get(url)
-				if (cached && cached.v.readyState >= 3) {
-					setIsReady(true)
+
+				if (cached) {
+					cached.v.play().catch(() => {})
+
+					if (cached.v.readyState >= 3) {
+						setIsReady(true)
+					}
 				}
 			}
 		})
 
 		cache.current.forEach((data, url) => {
 			if (!activeUrls.includes(url)) {
+				// ЗАМІСТЬ ПОВНОГО ВИДАЛЕННЯ:
+				// Просто ставимо на паузу, щоб не вантажити процесор
 				data.v.pause()
-				data.v.src = ''
-				data.v.load()
-				data.t.dispose()
-				cache.current.delete(url)
+
+				// Видаляємо лише якщо кеш став занадто великим (наприклад, більше 6 відео)
+				if (cache.current.size > 6) {
+					data.v.src = ''
+					data.v.load()
+					data.t.dispose()
+					cache.current.delete(url)
+				}
 			}
 		})
 	}
