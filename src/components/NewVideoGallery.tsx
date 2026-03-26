@@ -120,7 +120,8 @@ export default function NewVideoGallery({ media }: { media: MediaItem[] }) {
 				camera={{ zoom: 1, position: [0, 0, 5] }}
 				gl={{
 					outputColorSpace: THREE.SRGBColorSpace,
-					toneMapping: THREE.NoToneMapping
+					toneMapping: THREE.NoToneMapping,
+					powerPreference: 'low-power' // важливо для Safari на MacBook
 				}}
 			>
 				<Gallery
@@ -166,72 +167,72 @@ function Gallery({ media, size, currentIndex, setCurrentIndex, setIsPlaying }: G
 	const touchStartX = useRef<number | null>(null)
 	const [isReady, setIsReady] = useState(false)
 
+	const createVideo = (url: string, isActive: boolean): HTMLVideoElement => {
+		const v = document.createElement('video')
+		v.src = url
+		v.muted = true
+		v.loop = true
+		v.playsInline = true
+		// Обидва атрибути для Safari
+		v.setAttribute('playsinline', '')
+		v.setAttribute('webkit-playsinline', '')
+		v.crossOrigin = 'anonymous'
+		v.preload = isActive ? 'auto' : 'metadata'
+		return v
+	}
+
 	const updateResources = (currIdx: number) => {
 		const indices = [
 			currIdx,
 			(currIdx + 1) % media.length,
 			(currIdx - 1 + media.length) % media.length
 		]
-
 		const activeUrls = indices.map(i => getMediaUrl(media[i]))
-
 		const currentActiveUrl = getMediaUrl(media[currIdx])
 
-		activeUrls.forEach(url => {
-			if (!cache.current.has(url)) {
-				const v = document.createElement('video')
-				v.src = url
-				v.muted = true
-				v.loop = true
-				v.autoplay = false
-				v.playsInline = true
-				// Додаємо специфічні атрибути для Safari
-				v.setAttribute('playsinline', '')
-				v.setAttribute('webkit-playsinline', 'true')
-				v.setAttribute('muted', '')
-				v.crossOrigin = 'anonymous'
-				v.preload = 'auto' // Для Safari краще 'auto', ніж 'metadata'
+		activeUrls.forEach((url, i) => {
+			const isActive = url === currentActiveUrl
 
-				if (url === currentActiveUrl) {
-					v.onplaying = () => setIsReady(true)
+			if (!cache.current.has(url)) {
+				const v = createVideo(url, isActive)
+				const t = new THREE.VideoTexture(v)
+				// Safari: не вмикати автооновлення для неактивних
+				t.needsUpdate = false
+
+				if (isActive) {
+					// canplaythrough надійніший в Safari ніж onplaying
+					v.addEventListener('canplaythrough', () => setIsReady(true), { once: true })
+					v.play().catch(() => {})
+				} else {
+					// Сусідні відео — тільки preload, без play()
+					v.load()
 				}
 
-				// Запускаємо відео відразу
-				v.play().catch(() => {})
-
-				const t = new THREE.VideoTexture(v)
-				// Обов'язкові фільтри для стабільності GPU
-				t.minFilter = THREE.LinearFilter
-				t.magFilter = THREE.LinearFilter
-				t.generateMipmaps = false
-
 				cache.current.set(url, { v, t })
-			} else if (url === currentActiveUrl) {
-				const cached = cache.current.get(url)
-
-				if (cached) {
+			} else if (isActive) {
+				const cached = cache.current.get(url)!
+				if (cached.v.readyState >= 3) {
+					setIsReady(true)
+				} else {
+					cached.v.addEventListener('canplaythrough', () => setIsReady(true), {
+						once: true
+					})
+				}
+				// Якщо відео було в preload-режимі — запускаємо
+				if (cached.v.paused) {
 					cached.v.play().catch(() => {})
-
-					if (cached.v.readyState >= 3) {
-						setIsReady(true)
-					}
 				}
 			}
 		})
 
+		// Прибираємо невикористані
 		cache.current.forEach((data, url) => {
 			if (!activeUrls.includes(url)) {
-				// ЗАМІСТЬ ПОВНОГО ВИДАЛЕННЯ:
-				// Просто ставимо на паузу, щоб не вантажити процесор
 				data.v.pause()
-
-				// Видаляємо лише якщо кеш став занадто великим (наприклад, більше 6 відео)
-				if (cache.current.size > 6) {
-					data.v.src = ''
-					data.v.load()
-					data.t.dispose()
-					cache.current.delete(url)
-				}
+				data.v.src = ''
+				data.v.load()
+				data.t.dispose()
+				cache.current.delete(url)
 			}
 		})
 	}
@@ -301,6 +302,7 @@ function Gallery({ media, size, currentIndex, setCurrentIndex, setIsPlaying }: G
 
 	useFrame((_, delta) => {
 		if (!materialRef.current) return
+
 		if (state.current.isTransitioning) {
 			state.current.progress += delta * 2.5
 			if (state.current.progress >= 1) {
@@ -312,11 +314,18 @@ function Gallery({ media, size, currentIndex, setCurrentIndex, setIsPlaying }: G
 		const prevUrl = getMediaUrl(media[state.current.prevIndex])
 		const currUrl = getMediaUrl(media[currentIndex])
 
-		const prev = cache.current.get(prevUrl)?.t
-		const curr = cache.current.get(currUrl)?.t
+		const prevEntry = cache.current.get(prevUrl)
+		const currEntry = cache.current.get(currUrl)
 
-		if (prev) materialRef.current.uniforms.tPrev.value = prev
-		if (curr) materialRef.current.uniforms.tCurrent.value = curr
+		if (prevEntry) {
+			// Дозволяємо оновлення тільки якщо текстура активна в шейдері
+			prevEntry.t.needsUpdate = state.current.isTransitioning
+			materialRef.current.uniforms.tPrev.value = prevEntry.t
+		}
+		if (currEntry) {
+			currEntry.t.needsUpdate = true // поточна завжди оновлюється
+			materialRef.current.uniforms.tCurrent.value = currEntry.t
+		}
 		materialRef.current.uniforms.mixRatio.value = state.current.progress
 	})
 
