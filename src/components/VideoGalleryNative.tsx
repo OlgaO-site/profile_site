@@ -1,38 +1,33 @@
 'use client'
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { playfairDisplay } from '../app/layout'
+import { MediaItem } from '../types/baseTypes'
 
-export type MediaItem = {
-	name: string
-	type: 'video' | 'photo'
-	url: string
-}
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 const ASPECT = 2 / 3
 const MAX_HEIGHT_RATIO = 0.65
-const FADE_STEP = 0.06
+const FADE_DURATION_MS = 300
 
 export default function VideoGalleryNative({ media }: { media: MediaItem[] }) {
 	const containerRef = useRef<HTMLDivElement>(null)
 
-	const [containerWidth, setContainerWidth] = useState(224)
-	const [containerHeight, setContainerHeight] = useState(224 / ASPECT)
+	const [containerWidth, setContainerWidth] = useState(317)
+	const [containerHeight, setContainerHeight] = useState(317 / ASPECT)
 	const [offsetY, setOffsetY] = useState(0)
 
 	const [currentIndex, setCurrentIndex] = useState(0)
 	const [nextIndex, setNextIndex] = useState<number | null>(null)
-	const [fade, setFade] = useState(0)
+	const [nextOpacity, setNextOpacity] = useState(0)
 
 	const videoRefs = useRef<(HTMLVideoElement | null)[]>([])
-
-	const nextIndexRef = useRef<number | null>(null)
-	const rafRef = useRef<number | null>(null)
 	const isAnimatingRef = useRef(false)
+	const transitionTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+	const rafRef = useRef<number | null>(null)
 
 	// ---------- LAYOUT
 	useEffect(() => {
 		const updateLayout = () => {
-			// visualViewport точніший на iOS (враховує клавіатуру, safe area)
 			const viewportHeight = window.visualViewport?.height ?? window.innerHeight
 			const maxHeight = viewportHeight * MAX_HEIGHT_RATIO
 			const isMobile = window.matchMedia('(max-width: 768px)').matches
@@ -51,7 +46,6 @@ export default function VideoGalleryNative({ media }: { media: MediaItem[] }) {
 			}
 
 			let calculatedHeight = baseWidth / ASPECT
-
 			if (calculatedHeight > maxHeight) {
 				calculatedHeight = maxHeight
 				baseWidth = calculatedHeight * ASPECT
@@ -64,139 +58,116 @@ export default function VideoGalleryNative({ media }: { media: MediaItem[] }) {
 		updateLayout()
 		window.addEventListener('resize', updateLayout)
 		window.visualViewport?.addEventListener('resize', updateLayout)
-
 		return () => {
 			window.removeEventListener('resize', updateLayout)
 			window.visualViewport?.removeEventListener('resize', updateLayout)
 		}
 	}, [])
 
-	// ---------- PRELOAD
-	// Програмно preload наступного відео, бо Safari ігнорує preload="auto" на мобільному
+	// ---------- ПОЧАТКОВИЙ PLAY (тільки один раз при маунті)
 	useEffect(() => {
+		const video = videoRefs.current[0]
+		if (video && media[0]?.type === 'video') {
+			video.load()
+			video.play().catch(() => {})
+		}
+
+		// Preload решти відео
 		media.forEach((item, i) => {
-			if (item.type === 'video') {
-				const video = videoRefs.current[i]
-				if (video && video.readyState === 0) {
-					video.load()
-				}
-			}
+			if (i === 0 || item.type !== 'video') return
+			const video = videoRefs.current[i]
+			if (video) video.load()
 		})
 	}, [media])
 
-	// ---------- PLAY CONTROL
-	// Окремий хелпер, який можна викликати синхронно з gesture
-	const playVideo = useCallback(
-		(index: number) => {
-			const video = videoRefs.current[index]
-			if (!video || media[index]?.type !== 'video') return
+	// ---------- NAVIGATE
+	const navigateTo = useCallback(
+		(idx: number) => {
+			if (isAnimatingRef.current) return
+			isAnimatingRef.current = true
 
-			// Скидаємо до початку тільки якщо вже не грає (уникаємо "мерехтіння")
-			if (video.paused) {
-				video.currentTime = 0
+			// ✅ play() СИНХРОННО з gesture — Safari вимагає це
+			const nextVideo = videoRefs.current[idx]
+			if (nextVideo && media[idx]?.type === 'video') {
+				nextVideo.currentTime = 0
+				nextVideo.play().catch(() => {})
 			}
 
-			video.play().catch(() => {
-				// Safari блокує — нормально, відео просто буде на паузі
+			setNextIndex(idx)
+			setNextOpacity(0)
+
+			// Два rAF — браузер рендерить елемент з opacity:0 перед transition
+			rafRef.current = requestAnimationFrame(() => {
+				rafRef.current = requestAnimationFrame(() => {
+					setNextOpacity(1)
+
+					transitionTimerRef.current = setTimeout(() => {
+						// Transition завершено
+						setCurrentIndex(idx)
+						setNextIndex(null)
+						setNextOpacity(0)
+						isAnimatingRef.current = false
+
+						// Pause всіх крім поточного — після завершення transition
+						// щоб не конфліктувати з Safari gesture timing
+						videoRefs.current.forEach((v, i) => {
+							if (i !== idx) v?.pause()
+						})
+					}, FADE_DURATION_MS)
+				})
 			})
 		},
 		[media]
 	)
 
-	const pauseAll = useCallback(() => {
-		videoRefs.current.forEach(v => v?.pause())
+	// Cleanup при розмонтуванні
+	useEffect(() => {
+		return () => {
+			if (transitionTimerRef.current) clearTimeout(transitionTimerRef.current)
+			if (rafRef.current) cancelAnimationFrame(rafRef.current)
+		}
 	}, [])
 
-	// Коли currentIndex змінився — пауза всіх, play поточного
+	// ---------- CURSOR — по всьому window як в Three.js версії
 	useEffect(() => {
-		pauseAll()
-		playVideo(currentIndex)
-	}, [currentIndex, pauseAll, playVideo])
-
-	// ---------- NAVIGATE — центральна функція навігації
-	// Викликається синхронно з gesture, щоб Safari не блокував play()
-	const navigateTo = useCallback(
-		(idx: number) => {
-			if (isAnimatingRef.current) return
-
-			// FIX: викликаємо play() СИНХРОННО з gesture — Safari це дозволяє
-			playVideo(idx)
-
-			nextIndexRef.current = idx
-			setNextIndex(idx)
-		},
-		[playVideo]
-	)
-
-	// ---------- FADE ANIMATION
-	useEffect(() => {
-		if (nextIndex === null) return
-
-		isAnimatingRef.current = true
-
-		const animate = () => {
-			setFade(prev => {
-				const next = prev + FADE_STEP
-
-				if (next >= 1) {
-					// Завершення анімації
-					const resolved = nextIndexRef.current
-					setCurrentIndex(resolved!)
-					setNextIndex(null)
-					nextIndexRef.current = null
-					isAnimatingRef.current = false
-					return 0
-				}
-
-				rafRef.current = requestAnimationFrame(animate)
-				return next
-			})
-		}
-
-		rafRef.current = requestAnimationFrame(animate)
-
-		return () => {
-			// FIX: гарантовано скасовуємо rAF при розмонтуванні/перериванні
-			if (rafRef.current !== null) {
-				cancelAnimationFrame(rafRef.current)
-				rafRef.current = null
+		const onMouseMove = (e: MouseEvent) => {
+			if (e.clientX < window.innerWidth / 2) {
+				document.body.style.cursor = 'url(/images/left.png) 16 16, auto'
+			} else {
+				document.body.style.cursor = 'url(/images/right.png) 16 16, auto'
 			}
 		}
-	}, [nextIndex])
 
-	// ---------- CLICK (desktop + Android)
-	// FIX: слухаємо click на контейнері, а не на window
-	// Safari не генерує click на window для довільних елементів без cursor:pointer
+		window.addEventListener('mousemove', onMouseMove)
+		return () => {
+			window.removeEventListener('mousemove', onMouseMove)
+			document.body.style.cursor = 'auto'
+		}
+	}, [])
+
+	// ---------- CLICK — по всьому window як в Three.js версії
 	useEffect(() => {
-		const el = containerRef.current
-		if (!el) return
-
 		const onClick = (e: MouseEvent) => {
 			if (isAnimatingRef.current) return
-
-			const rect = el.getBoundingClientRect()
-			const relativeX = e.clientX - rect.left
-
-			if (relativeX < rect.width / 2) {
+			if (e.clientX < window.innerWidth / 2) {
 				navigateTo((currentIndex - 1 + media.length) % media.length)
 			} else {
 				navigateTo((currentIndex + 1) % media.length)
 			}
 		}
 
-		el.addEventListener('click', onClick)
-		return () => el.removeEventListener('click', onClick)
+		window.addEventListener('click', onClick)
+		return () => window.removeEventListener('click', onClick)
 	}, [currentIndex, media.length, navigateTo])
 
-	// ---------- TOUCH (mobile — iOS і Android)
+	// ---------- TOUCH — свайп на мобілці
 	useEffect(() => {
 		const el = containerRef.current
 		if (!el) return
 
 		let startX: number | null = null
 		let startY: number | null = null
-		const threshold = 40
-		// Якщо свайп більше вертикальний — ігноруємо (щоб не конфліктити зі скролом)
+		const swipeThreshold = 40
 		const verticalThreshold = 30
 
 		const onTouchStart = (e: TouchEvent) => {
@@ -212,34 +183,33 @@ export default function VideoGalleryNative({ media }: { media: MediaItem[] }) {
 			const deltaX = endX - startX
 			const deltaY = endY - startY
 
-			// FIX: ігноруємо переважно вертикальні свайпи
+			// Ігноруємо переважно вертикальні свайпи (скрол)
 			if (Math.abs(deltaY) > verticalThreshold && Math.abs(deltaY) > Math.abs(deltaX)) {
 				startX = null
 				startY = null
 				return
 			}
 
-			if (Math.abs(deltaX) < threshold) {
+			if (Math.abs(deltaX) < swipeThreshold) {
 				startX = null
 				startY = null
 				return
 			}
 
-			const idx =
+			navigateTo(
 				deltaX > 0
 					? (currentIndex - 1 + media.length) % media.length
 					: (currentIndex + 1) % media.length
-
-			// FIX: navigateTo викликає play() синхронно з touch event — Safari пропускає
-			navigateTo(idx)
+			)
 
 			startX = null
 			startY = null
 		}
 
-		// FIX: touchend без passive — щоб можна було preventDefault якщо потрібно
+		// touchstart — passive (не блокуємо скрол)
+		// touchend — без passive, щоб мати можливість preventDefault якщо потрібно
 		el.addEventListener('touchstart', onTouchStart, { passive: true })
-		el.addEventListener('touchend', onTouchEnd, { passive: true })
+		el.addEventListener('touchend', onTouchEnd)
 
 		return () => {
 			el.removeEventListener('touchstart', onTouchStart)
@@ -248,39 +218,55 @@ export default function VideoGalleryNative({ media }: { media: MediaItem[] }) {
 	}, [currentIndex, media.length, navigateTo])
 
 	return (
-		<div
-			ref={containerRef}
-			className='relative overflow-hidden'
-			style={{
-				width: `${containerWidth}px`,
-				height: `${containerHeight}px`,
-				transform: `translateY(${offsetY}px)`,
-				cursor: 'pointer',
-				WebkitTapHighlightColor: 'transparent',
-				touchAction: 'pan-y'
-			}}
-		>
-			{/* CURRENT */}
-			<MediaSlide
-				item={media[currentIndex]}
-				videoRef={el => (videoRefs.current[currentIndex] = el)}
+		<div>
+			{/* Галерея */}
+			<div
+				ref={containerRef}
+				className='relative overflow-hidden'
 				style={{
-					opacity: nextIndex !== null ? 1 - fade : 1,
-					zIndex: 1
+					width: `${containerWidth}px`,
+					height: `${containerHeight}px`,
+					transform: `translateY(${offsetY}px)`,
+					WebkitTapHighlightColor: 'transparent',
+					touchAction: 'pan-y'
 				}}
-			/>
+			>
+				{media.map((item, i) => (
+					<MediaSlide
+						key={i}
+						item={item}
+						videoRef={el => (videoRefs.current[i] = el)}
+						width={containerWidth}
+						height={containerHeight}
+						style={{
+							display: i === currentIndex || i === nextIndex ? 'block' : 'none',
+							position: 'absolute',
+							inset: 0,
+							zIndex: i === nextIndex ? 2 : 1,
+							opacity: i === nextIndex ? nextOpacity : 1,
+							transition:
+								i === nextIndex
+									? `opacity ${FADE_DURATION_MS}ms ease-in-out`
+									: 'none'
+						}}
+					/>
+				))}
+			</div>
 
-			{/* NEXT */}
-			{nextIndex !== null && (
-				<MediaSlide
-					item={media[nextIndex]}
-					videoRef={el => (videoRefs.current[nextIndex] = el)}
-					style={{
-						opacity: fade,
-						zIndex: 2
-					}}
-				/>
-			)}
+			{/* Підпис — точно як VideoCaption з Three.js версії */}
+			<div
+				className={`w-full mt-6 ${containerHeight < 400 ? 'md:mt-4' : 'md:mt-8'}`}
+				style={{
+					width: `${containerWidth}px`,
+					transform: `translateY(${offsetY}px)`
+				}}
+			>
+				<p
+					className={`min-h-3.5 xl:text-lg text-center md:text-left w-full tracking-1 leading-none ${containerHeight < 400 ? 'md:mt-[0.5em]' : 'md:mt-[1em]'} ${playfairDisplay.className} relative z-50`}
+				>
+					{media[currentIndex]?.name}
+				</p>
+			</div>
 		</div>
 	)
 }
@@ -288,11 +274,15 @@ export default function VideoGalleryNative({ media }: { media: MediaItem[] }) {
 function MediaSlide({
 	item,
 	videoRef,
-	style
+	style,
+	width,
+	height
 }: {
 	item: MediaItem
 	videoRef: (el: HTMLVideoElement | null) => void
 	style: React.CSSProperties
+	width: number
+	height: number
 }) {
 	if (item.type === 'photo') {
 		return (
@@ -300,26 +290,32 @@ function MediaSlide({
 			<img
 				src={item.url}
 				alt={item.name}
-				className='absolute inset-0 w-full h-full'
-				style={{ ...style, objectFit: 'cover' }}
 				draggable={false}
+				style={{
+					...style,
+					width: `${width}px`,
+					height: `${height}px`,
+					objectFit: 'cover'
+				}}
 			/>
 		)
 	}
 
 	return (
-		<div className='absolute inset-0' style={style}>
+		<div style={style}>
 			<video
 				ref={videoRef}
 				src={item.url}
 				muted
 				playsInline
 				loop
-				preload='metadata'
-				className='absolute inset-0 w-full h-full'
-				style={{ objectFit: 'cover' }}
-				onLoadedMetadata={e => {
-					void (e.target as HTMLVideoElement)
+				preload='auto'
+				style={{
+					position: 'absolute',
+					inset: 0,
+					width: `${width}px`,
+					height: `${height}px`,
+					objectFit: 'cover'
 				}}
 			/>
 		</div>
